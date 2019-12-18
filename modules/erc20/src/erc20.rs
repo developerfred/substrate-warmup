@@ -66,6 +66,12 @@ decl_module! {
             let sender = ensure_signed(_origin)?;
             Self::_transfer(token_id, sender, to, value)
         }
+        // track total tokens is burned
+        // origin is assumed as burned
+        fn track(_origin, token_id: u32, total_burned: T::TokenBalance) -> Result {
+                let account = ensure_signed(origin)?;
+                Self::_track(token_id, account,  total_burned);
+        }
 
         // approve token transfer from one account to another
         // once this is done, transfer_from can be called with corresponding values
@@ -106,8 +112,10 @@ decl_module! {
             <BalanceOf<T>>::insert(key, bal);
 
             Self::deposit_event(RawEvent::Burn(token_id, account,  value));
+            Self::_track(token_id, account, value);
             Ok(())
         }
+
     }
 }
 
@@ -176,6 +184,9 @@ decl_event!(
         // event for burn of tokens
         // tokenid, owner, value
         Burn(u32, AccountId, Balance),
+        // event for Track of tokens
+        // tokenid, owner, value
+        Track(u32, AccountId, Balance),
     }
 );
 
@@ -211,6 +222,19 @@ impl<T: Trait> Module<T> {
         );
 
         Self::deposit_event(RawEvent::Transfer(token_id, from, to, value));
+        Ok(())
+    }
+
+    fn _track(token_id: u32, from: T::AccountId, total_burned: T::TokenBalance) -> Result {
+        // trace burned tokens
+        <BalanceOf<T>>::insert(
+            (token_id, from.clone()),
+            Self::balance_of((token_id, from.clone()))
+                .checked_sub(&total_burned)
+                .ok_or("Not enough balance.")?,
+        );
+
+        Self::deposit_event(RawEvent::Track(token_id, from, total_burned));
         Ok(())
     }
 }
